@@ -15,24 +15,20 @@ public class PacAgent extends Agent {
 			y = _y;
 		}
 		public Position() {};
-	    public String toString() {
-	    	return "Agent " + id + ": Loc=(" + x + ", " + y + ")";
-		}
 	}
 	private Position pos = new Position();
 	private int[][] map = new int [50][50];
 	private Position des = new Position(-1,-1);
 	private PacPercept pacPercept;
-	private int inf = 2147483600;
 	private Position[] exploreDes = new Position[120];
 	private Set<Position> pacLocation = new HashSet<Position>(); 
 	private Set<Position> sendPacs = new HashSet<Position>(); 
 	private final int threshhold = 1;
 	private int status = -1; //-1 means communication, 0 means exploring, 1 means going to pac, 2 means carrying
-	private int size, num_id;
-	private int startExplore = -1;
-	private int num_agents = 0, num_cubes = 0;
+	private int size, num_id,inf = 2147480000;
+	private int startExplore = -1, endExplore = -1, num_agents = 0, num_cubes = 0;
 	private boolean inited = false;
+	private Random rand = new Random();
 
 	//After this function , the position of this agent should be updated
 	//This function will mark all of the agents' position
@@ -56,19 +52,29 @@ public class PacAgent extends Agent {
 			}
 		}
 	}
+	private void setDes(int x,int y) {
+		des.x = x;
+		des.y = y;
+	}
+	private void print(Object obj) {
+		System.out.println(obj);
+	}
 	private boolean inarea(int x,int y) {
 		return x >= 0 && x < size && y >= 0 && y < size;
 	}
 
 	private Action explore() {
-		Action action = goDes(true);
+		Action action = goDes(false);
 		if(action == null) {
-			if(startExplore >= num_cubes) return null;
-			des = exploreDes[startExplore ++];
-			action = goDes(true);
+			if(startExplore >= endExplore) setDes(rand.nextInt(50), rand.nextInt(50));
+			else if(exploreDes[startExplore].x == des.x && exploreDes[startExplore].y == des.y) startExplore ++;
+			if(startExplore >= endExplore) setDes(rand.nextInt(50), rand.nextInt(50));
+			else des = exploreDes[startExplore];
+			action = goDes(false);
 		}
 		return action;
 	}
+	
 	private int getPacDir() {
 		if(pos.x == des.x) {
 			if(pos.y - des.y == 1) return 0;
@@ -81,13 +87,13 @@ public class PacAgent extends Agent {
 	}
 	
 	private int avoidBump(int direction) {
-		if(pacPercept.feelBump()) direction = (new Random()).nextInt(4);
+		if(pacPercept.feelBump()) direction = rand.nextInt(4);
 		return direction;
 	}
 	
 	private Action goDes(boolean around) {
 		if(!around && pos.x == des.x && pos.y == des.y) return null; 
-		if(des.x == -1 || des.y == -1) return null;
+		if(!inarea(des.x, des.y)) return null;
 		if(around && getPacDir() != -1) return null;
 		int move = -1, max = -1;
 		int distance[] = {pos.y - des.y, des.x - pos.x, des.y - pos.y, pos.x - des.x};
@@ -147,21 +153,12 @@ public class PacAgent extends Agent {
 		return new Say(res);
 	}
 	private void init() {
-		int j = 3;
-		System.out.println();
-		boolean back = false;
-		for(int i = 3;i < 50;i += 5) {
-			if(back) j -= 5;
-			else j += 5;
-			for(;j < 50 && j > 0;) {
-				exploreDes[num_cubes ++] = new Position(i,j);
-				System.out.print(" " + exploreDes[num_cubes - 1] + " ");
-				if(back) j -= 5;
-				else j += 5;
-			}
-			back = !back;
-		}
+		for(int i = 5;i < 50;i += 5) exploreDes[num_cubes ++] = new Position(5, i);
+		for(int i = 5;i < 50;i += 5) exploreDes[num_cubes ++] = new Position(i, 45);
+		for(int i = 50;i > 0;i -= 5) exploreDes[num_cubes ++] = new Position(45, i);
+		for(int i = 50;i > 0;i -= 5) exploreDes[num_cubes ++] = new Position(i, 5);
 		startExplore = num_id * num_cubes / num_agents;
+		endExplore = (num_id + 1) * num_cubes / num_agents;
 		inited = true;
 	}
 	private Action occupied(Position location) {
@@ -188,7 +185,7 @@ public class PacAgent extends Agent {
 		String[] messages = pp.getMessages();
 		for(String message : messages) {
 			if(message.length() == 0) {
-				num_agents += messages.length;
+				num_agents ++;
 				continue;
 			}
 			String[] curPac = message.split(";");
@@ -208,14 +205,17 @@ public class PacAgent extends Agent {
 		markPackages( pp.getVisPackages() );
 		VisiblePackage Holding = pp.getHeldPackage();
 		if(Holding != null) {
-			des.x = Holding.getDestX();
-			des.y = Holding.getDestY();
+			status = 2;
+			setDes(Holding.getDestX(), Holding.getDestY());
+		}else if(status == 2) {// by some mistake, seems holding sth but not. The status should be 0
+			status = 0;
 		}
 	}
 	
 	@Override
 	public Action selectAction() {
 		Action action;
+
 		if(status == -1) {
 			status = 0;
 			return new Say("");
@@ -223,11 +223,15 @@ public class PacAgent extends Agent {
 		if(!inited) init();
 		if(status == 0) { //exploring
 			if(pacLocation.size() != 0) { //have pacs to carry
-				des = getNearestPac();
-				action = occupied(des);
-				removePac(des);
-				status = 1;
-				if(action != null) return action;				
+				Position tdes = getNearestPac();
+				if(Math.abs(pos.x - tdes.x) + Math.abs(pos.y - tdes.y) > 100) action = explore();
+				else {
+					des = tdes;
+					action = occupied(des);
+					removePac(des);
+					status = 1;
+					if(action != null) return action;
+				}
 			}
 			action = explore();
 		}else { //carrying

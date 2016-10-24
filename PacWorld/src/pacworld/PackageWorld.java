@@ -9,6 +9,7 @@ import agent.*;
 import java.util.List;
 import java.util.Date;
 import javax.swing.JOptionPane;
+import java.util.Random;
 import java.io.*;
 import java.lang.reflect.Constructor;
 
@@ -283,7 +284,10 @@ public class PackageWorld extends Environment{
       if (args.length > 2) {
          if (args[0].equals("-rand")) {
             useSeed = true;
-            seed = Integer.parseInt(args[1]);
+            seed = (new Random()).nextInt(65535);
+            //seed = 9903;
+            Integer.parseInt(args[1]);
+            System.out.println("==========================" + seed + "\n\n\n\n");
             pos = 2;
          }
       }
