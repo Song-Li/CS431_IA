@@ -96,7 +96,8 @@ public class PackageState extends State {
             destId = (int)(rand.nextFloat() * numDests);
          } while (state.map[x][y] != null || 
                (state.destinations[destId].getX() == x &&
-                     state.destinations[destId].getY() == y));     
+                     state.destinations[destId].getY() == y));   
+         System.out.println("" + x + ',' + y);
          Package p = new Package(i, destId, state.destinations[destId].getX(),
                      state.destinations[destId].getY());
          p.setX(x);
