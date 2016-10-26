@@ -284,9 +284,10 @@ public class PackageWorld extends Environment{
       if (args.length > 2) {
          if (args[0].equals("-rand")) {
             useSeed = true;
+            seed = Integer.parseInt(args[1]);
             seed = (new Random()).nextInt(65535);
-            //seed = 9903;
-            Integer.parseInt(args[1]);
+            //seed = 43445;
+
             System.out.println("==========================" + seed + "\n\n\n\n");
             pos = 2;
          }

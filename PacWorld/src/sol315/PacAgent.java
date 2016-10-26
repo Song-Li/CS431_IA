@@ -30,13 +30,13 @@ public class PacAgent extends Agent {
 		public Position() {};
 	}
 	private Position pos = new Position();
-	private int[][] map = new int [50][50];
+	private int[][] map = new int [50][50], curmap = new int[50][50];
 	private Position des = new Position(-1,-1);
 	private PacPercept pacPercept;
 	private Position[] exploreDes = new Position[120];
 	private Set<Position> pacLocation = new HashSet<Position>(); 
 	private Set<Position> sendPacs = new HashSet<Position>(); 
-	private final int threshhold = 1;
+	private final int threshold = 2;
 	private int status = -1; //-1 means communication, 0 means exploring, 1 means going to pac, 2 means carrying
 	private int size, num_id,inf = 2147480000;
 	private int startExplore = -1, endExplore = -1, num_agents = 0, num_cubes = 0;
@@ -53,13 +53,28 @@ public class PacAgent extends Agent {
 			}
 		}
 	}
+	private Action dropOff() {
+		if(curmap[des.x][des.y] > threshold) {
+			if(getPacDir() != 1) {
+				sendPacs.add(new Position(pos.x + 1, pos.y));
+				addPac(new Position(pos.x + 1, pos.y));
+				return new Dropoff(1);
+			}else {
+				sendPacs.add(new Position(pos.x - 1, pos.y));
+				addPac(new Position(pos.x + 1, pos.y));
+				return new Dropoff(3);
+			}
+		}
+		return new Dropoff(getPacDir());
+	}
 	//if we find a package, vote this position as positive. If this position is marked more than threshhold, this is a package
 	private void markPackages(VisiblePackage[] packages) {
 		for(int i = 0;i < packages.length;++ i) {
 			int tx = packages[i].getX(), ty = packages[i].getY();
 			if(!inarea(tx, ty)) continue;
 			map[tx][ty] += 2; //This grid has been minus 1 so we need to plus 2 here
-			if(map[tx][ty] > threshhold) {
+			curmap[tx][ty] += 2; //This grid has been minus 1 so we need to plus 2 here
+			if(map[tx][ty] > threshold) {
 				sendPacs.add(new Position(tx, ty));//This is a set of found and send packages
 				addPac(new Position(tx, ty));//add this package to this position
 				map[tx][ty] = -inf;
@@ -125,7 +140,10 @@ public class PacAgent extends Agent {
 			for(int j = 0;j < 11;++ j) {
 				int x = pos.x + 5 - i;
 				int y = pos.y + 5 - j;
-				if(inarea(x,y)) map[x][y] -= 1;
+				if(inarea(x,y)) {
+					curmap[x][y] -= 1;
+					map[x][y] -= 1;
+				}
 			}
 		}
 	}
@@ -161,11 +179,12 @@ public class PacAgent extends Agent {
 		return ret;
 	}
 	//Function to send all the send package set by a format
-	private Action sendPacLocation() {
+	private Action sendPacLocation(String origin) {
 		String res = "";
 		for(Position location : sendPacs) {
-			res += "" + location.x + ',' + location.y + ',' + (threshhold + 1) + ';';
+			res += "" + location.x + ',' + location.y + ',' + (threshold + 1) + ';';
 		}
+		res += origin;
 		if(res.length() == 0) return null;
 		return new Say(res);
 	}
@@ -173,9 +192,9 @@ public class PacAgent extends Agent {
 	//Based on their agent number
 	private void init() {
 		for(int i = 3;i < 50;i += 5) exploreDes[num_cubes ++] = new Position(3, i);
-		for(int i = 3;i < 50;i += 5) exploreDes[num_cubes ++] = new Position(i, 48);
-		for(int i = 48;i > 0;i -= 5) exploreDes[num_cubes ++] = new Position(48, i);
-		for(int i = 48;i > 0;i -= 5) exploreDes[num_cubes ++] = new Position(i, 3);
+		for(int i = 3;i < 50;i += 5) exploreDes[num_cubes ++] = new Position(i, 46);
+		for(int i = 46;i > 0;i -= 5) exploreDes[num_cubes ++] = new Position(46, i);
+		for(int i = 46;i > 0;i -= 5) exploreDes[num_cubes ++] = new Position(i, 3);
 		
 		startExplore = num_id * num_cubes / num_agents;
 		endExplore = (num_id + 1) * num_cubes / num_agents;
@@ -183,11 +202,11 @@ public class PacAgent extends Agent {
 	}
 	//If an agent want to carry a package, send the occupied message to everyone else
 	private Action occupied(Position location) {
-		return new Say("" + location.x + ',' + location.y + ',' + -1 + ';');
+		return sendPacLocation("" + location.x + ',' + location.y + ',' + -1 + ';');
 	}
 	//Add package to the package set. 
 	private boolean addPac(Position location) {
-		if(map[location.x][location.y] < -20) return false;
+		//if(map[location.x][location.y] < -20) return false;
 		for(Position pos : pacLocation) {
 			if(pos.x == location.x && pos.y == location.y) return false;
 		}
@@ -213,7 +232,7 @@ public class PacAgent extends Agent {
 			for(String curr : curPac) {
 				String[] currint = curr.split(",");
 				int tx = Integer.parseInt(currint[0]), ty = Integer.parseInt(currint[1]),val = Integer.parseInt(currint[2]);
-				if(val > threshhold) {//This is a package
+				if(val > threshold) {//This is a package
 					addPac(new Position(tx, ty));//add this package to the package set
 					map[tx][ty] += Integer.parseInt(currint[2]);//mark the map
 				}
@@ -245,9 +264,8 @@ public class PacAgent extends Agent {
 			if(pacLocation.size() != 0) { //have pacs to carry
 				Position tdes = getNearestPac();
 				//This if is designed for if the distance is more than a number, give up it. But finally I accept all positions
-				if(Math.abs(pos.x - tdes.x) + Math.abs(pos.y - tdes.y) > 80) {
-					des = tdes;
-					action = goDes(false);//explore the direction of the nearest package
+				if(Math.abs(pos.x - tdes.x) + Math.abs(pos.y - tdes.y) > (num_cubes / num_agents + 1 - (endExplore - startExplore)) * 10) {
+					action = explore();//explore the direction of the nearest package
 				}
 				else {
 					des = tdes;
@@ -260,7 +278,7 @@ public class PacAgent extends Agent {
 			else action = explore();
 		}else { //carrying
 			if(sendPacs.size() != 0) { //found new pac when carrying
-				action = sendPacLocation();// Send the packages this agent found to everyone else
+				action = sendPacLocation("");// Send the packages this agent found to everyone else
 				sendPacs.clear();
 				return action;
 			}
@@ -271,7 +289,7 @@ public class PacAgent extends Agent {
 					action = new Pickup(getPacDir());
 				}else {
 					status = 0;
-					action = new Dropoff(getPacDir());
+					action = dropOff();
 				}
 			}
 		}
